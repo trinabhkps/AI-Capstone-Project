@@ -1,0 +1,248 @@
+
+<div id="root" style="min-height:600px"></div>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script>
+const {useState,useRef,useEffect}=React;
+
+const MOODS=[
+  {id:"focused",label:"Focused",emoji:"🎯",color:"#a78bfa",glow:"rgba(167,139,250,0.25)"},
+  {id:"energized",label:"Energized",emoji:"⚡",color:"#34d399",glow:"rgba(52,211,153,0.25)"},
+  {id:"tired",label:"Tired",emoji:"😴",color:"#93c5fd",glow:"rgba(147,197,253,0.2)"},
+  {id:"anxious",label:"Anxious",emoji:"😟",color:"#fcd34d",glow:"rgba(252,211,77,0.2)"},
+  {id:"motivated",label:"Motivated",emoji:"🔥",color:"#fb923c",glow:"rgba(251,146,60,0.25)"},
+  {id:"calm",label:"Calm",emoji:"🌿",color:"#86efac",glow:"rgba(134,239,172,0.2)"},
+  {id:"stressed",label:"Stressed",emoji:"😤",color:"#fca5a5",glow:"rgba(252,165,165,0.2)"},
+  {id:"happy",label:"Happy",emoji:"😊",color:"#f9a8d4",glow:"rgba(249,168,212,0.25)"},
+];
+
+const INSIGHTS={
+  focused:"Peak focus detected — tackle your hardest material now. Deep work blocks of 90 min are ideal.",
+  energized:"High energy! Use active recall and timed quizzes to capitalise on this state.",
+  tired:"Low energy noted. Stick to light flashcard review; skip complex new topics for now.",
+  anxious:"Try 5 min of box breathing first, then break tasks into very small, concrete steps.",
+  motivated:"Motivation is high — set stretch targets today. You're more resilient to difficulty right now.",
+  calm:"Steady state — ideal for absorbing new material, annotating notes, and slow reading.",
+  stressed:"Take a 10-min walk to lower cortisol, then work on familiar material for small wins.",
+  happy:"Positive mood boosts creativity — great day for essays, brainstorming, and writing.",
+};
+
+const AI_TIPS={
+  focused:["🧠 Deep work: silence notifications for 90-min blocks to reach flow.","🔁 Space repetition: review notes 24 hrs later for 60% better retention.","💧 Hydration boosts cognition by up to 14% — keep water at your desk."],
+  energized:["⚡ Channel energy into active recall — quiz yourself, don't just reread.","🏃 Short 2-min movement breaks every 45 min prevent burnout.","📊 Timed practice exams work best when energy is this high."],
+  tired:["😴 The 20-min power nap before studying can restore alertness.","🃏 Flashcard review is low-effort and still highly effective.","☕ Caffeine peaks 45 min after drinking — plan your session timing."],
+  anxious:["🌬️ Box breathing (4-4-4-4) reduces cortisol before you start.","✅ Write 3 tiny tasks you can finish in 10 min — then do them.","📓 Journaling worries for 5 min clears mental space for studying."],
+  motivated:["🎯 Set a stretch goal — you're resilient to setbacks right now.","📈 Tackle your hardest subject first while motivation is at peak.","🏆 Logging what you finish reinforces positive motivation loops."],
+  calm:["📖 Perfect state for deep reading and absorbing new concepts.","🔬 Review lecture notes and annotate them in your own words.","🎵 Low-tempo instrumental music helps maintain calm focus."],
+  stressed:["🌿 A 10-min walk lowers cortisol and improves working memory.","🧩 Work on familiar material for small wins that reduce stress.","📵 Phone-free blocks eliminate a major source of cognitive load."],
+  happy:["✍️ Creative thinking is enhanced — ideal for essay drafts.","🤝 Study with a peer today — positive mood boosts group focus.","🌟 Positive affect improves long-term memory encoding."],
+};
+
+const INIT_SESSIONS=[
+  {id:1,time:"08:00",dur:"90 min",subject:"Mathematics",topic:"Calculus — Differential Equations",diff:"hard",ai:true,done:true},
+  {id:2,time:"10:00",dur:"60 min",subject:"Physics",topic:"Electromagnetism — Faraday's Law",diff:"hard",ai:true,done:true},
+  {id:3,time:"11:30",dur:"45 min",subject:"Chemistry",topic:"Organic — Reaction Mechanisms",diff:"medium",ai:false,done:false},
+  {id:4,time:"14:00",dur:"60 min",subject:"English",topic:"Essay Writing — Argumentative Structure",diff:"easy",ai:false,done:false},
+  {id:5,time:"16:00",dur:"90 min",subject:"Mathematics",topic:"Practice Problems — Revision Set 3",diff:"medium",ai:true,done:false},
+];
+
+const SUBJECTS=[{name:"Mathematics",pct:68},{name:"Physics",pct:52},{name:"Chemistry",pct:41},{name:"English",pct:79}];
+const DIFF_COLORS={hard:{bg:"rgba(252,165,165,0.12)",color:"#fca5a5"},medium:{bg:"rgba(252,211,77,0.12)",color:"#fcd34d"},easy:{bg:"rgba(110,231,183,0.12)",color:"#6ee7b7"}};
+const now2=new Date();
+const DATE_STR=now2.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+
+function App(){
+  const [mood,setMood]=useState("focused");
+  const [sessions,setSessions]=useState(INIT_SESSIONS);
+  const [nextId,setNextId]=useState(6);
+  const [showAdd,setShowAdd]=useState(false);
+  const [toast,setToast]=useState(null);
+  const [activeNav,setActiveNav]=useState("Dashboard");
+  const [form,setForm]=useState({subject:"",topic:"",time:"09:00",dur:"60 min",diff:"medium"});
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiResponse,setAiResponse]=useState("");
+  const [showAiModal,setShowAiModal]=useState(false);
+  const toastTimer=useRef(null);
+  const cm=MOODS.find(m=>m.id===mood);
+  const done=sessions.filter(s=>s.done).length;
+
+  function showT(msg){clearTimeout(toastTimer.current);setToast(msg);toastTimer.current=setTimeout(()=>setToast(null),2600);}
+  function toggleDone(id){setSessions(p=>p.map(s=>s.id===id?{...s,done:!s.done}:s));const s=sessions.find(s=>s.id===id);showT(s?.done?"Session reopened":"Session complete ✓");}
+  function addSession(){
+    if(!form.subject.trim()){showT("Please enter a subject");return;}
+    setSessions(p=>[...p,{id:nextId,time:form.time,dur:form.dur,subject:form.subject,topic:form.topic||"General Study",diff:form.diff,ai:false,done:false}].sort((a,b)=>a.time.localeCompare(b.time)));
+    setNextId(n=>n+1);setForm({subject:"",topic:"",time:"09:00",dur:"60 min",diff:"medium"});setShowAdd(false);showT(`${form.subject} session added!`);
+  }
+
+  async function genPlan(){
+    setAiLoading(true);setShowAiModal(true);setAiResponse("");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:`You are a smart study planner AI. The student's current mood is "${mood}". Their sessions today: ${sessions.map(s=>`${s.time} - ${s.subject} (${s.topic}, ${s.dur}, ${s.diff})`).join("; ")}. Give a personalized 3-paragraph study plan recommendation covering: how their "${mood}" mood affects learning today, specific session prioritisation advice, and a motivational insight. Under 200 words. Warm and practical tone.`}]})});
+      const data=await res.json();
+      setAiResponse(data.content?.map(b=>b.text||"").join("")||"Could not generate plan.");
+    }catch{setAiResponse("Failed to connect to AI. Please try again.");}
+    setAiLoading(false);
+  }
+
+  const c={
+    app:{display:"flex",minHeight:"100vh",background:"#0F0D1E",color:"#E8E2FF",fontFamily:"'Inter','Segoe UI',sans-serif",fontSize:14},
+    sidebar:{width:190,background:"#1A1535",borderRight:"1px solid #2E2750",display:"flex",flexDirection:"column",padding:"22px 13px",flexShrink:0},
+    main:{flex:1,padding:"28px 32px",overflowY:"auto"},
+    navItem:(a)=>({display:"flex",alignItems:"center",gap:7,padding:"8px 11px",borderRadius:8,cursor:"pointer",fontSize:12,color:a?"#C4B5FD":"#8B80B8",background:a?"#241E42":"transparent",marginBottom:2,fontWeight:500}),
+    btn:(primary)=>({padding:"8px 15px",borderRadius:9,fontSize:12,fontWeight:600,cursor:"pointer",border:primary?"none":"1px solid #2E2750",background:primary?"linear-gradient(135deg,#7C6FBB,#C4B5FD)":"#1A1535",color:primary?"#0F0D1E":"#8B80B8",fontFamily:"inherit"}),
+    card:{background:"#1A1535",border:"1px solid #2E2750",borderRadius:13,padding:"16px 18px"},
+    inputF:{width:"100%",background:"#241E42",border:"1px solid #2E2750",borderRadius:8,padding:"8px 11px",fontFamily:"inherit",fontSize:12,color:"#F0EEFF",outline:"none",boxSizing:"border-box"},
+    label:{fontSize:10,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5,display:"block"},
+  };
+
+  const navItems=[{l:"Dashboard",e:"⊞"},{l:"Schedule",e:"📅"},{l:"Tasks",e:"✓"},{l:"Analytics",e:"📈"},{l:"Focus Timer",e:"⏱"},{l:"Mood History",e:"🌙"}];
+
+  return React.createElement("div",{style:c.app},
+    React.createElement("style",null,`@keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}} ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:#2E2750;border-radius:10px}`),
+
+    // SIDEBAR
+    React.createElement("aside",{style:c.sidebar},
+      React.createElement("div",{style:{fontFamily:"system-ui",fontSize:18,fontWeight:800,color:"#F0EEFF",marginBottom:3,letterSpacing:-0.5}},
+        "Lumin",React.createElement("span",{style:{color:"#C4B5FD"}},"o")),
+      React.createElement("div",{style:{fontSize:9,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:22}},"Study Intelligence"),
+      React.createElement("div",{style:{fontSize:9,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,paddingLeft:10}},"Menu"),
+      navItems.slice(0,4).map(n=>React.createElement("div",{key:n.l,style:c.navItem(activeNav===n.l),onClick:()=>setActiveNav(n.l)},React.createElement("span",{style:{fontSize:12}},n.e),n.l)),
+      React.createElement("div",{style:{fontSize:9,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,paddingLeft:10,marginTop:14}},"Tools"),
+      navItems.slice(4).map(n=>React.createElement("div",{key:n.l,style:c.navItem(activeNav===n.l),onClick:()=>setActiveNav(n.l)},React.createElement("span",{style:{fontSize:12}},n.e),n.l)),
+      React.createElement("div",{style:{marginTop:"auto",paddingTop:14,borderTop:"1px solid #2E2750"}},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",background:"#241E42",borderRadius:9}},
+          React.createElement("div",{style:{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#C4B5FD,#F59E0B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#0F0D1E"}},"AS"),
+          React.createElement("div",null,React.createElement("div",{style:{fontSize:11,fontWeight:600,color:"#F0EEFF"}},"Arjun S."),React.createElement("div",{style:{fontSize:9,color:"#8B80B8"}},"Pro Plan"))))
+    ),
+
+    // MAIN
+    React.createElement("main",{style:c.main},
+      // Header
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}},
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontFamily:"system-ui",fontSize:22,fontWeight:800,color:"#F0EEFF",letterSpacing:-0.5}},"Today's Study Plan"),
+          React.createElement("div",{style:{fontSize:11,color:"#8B80B8",marginTop:3}},DATE_STR)),
+        React.createElement("div",{style:{display:"flex",gap:9}},
+          React.createElement("button",{style:c.btn(false),onClick:genPlan},"✦ AI Generate Plan"),
+          React.createElement("button",{style:c.btn(true),onClick:()=>setShowAdd(v=>!v)},"+ Add Session"))),
+
+      // MOOD
+      React.createElement("div",{style:{...c.card,display:"flex",gap:28,alignItems:"center",marginBottom:20,position:"relative",overflow:"hidden"}},
+        React.createElement("div",{style:{position:"absolute",top:-40,right:-40,width:160,height:160,background:cm.glow,borderRadius:"50%",filter:"blur(45px)",pointerEvents:"none",transition:"background 1s"}}),
+        React.createElement("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:7,flexShrink:0}},
+          React.createElement("div",{style:{width:66,height:66,borderRadius:"50%",background:cm.color,boxShadow:`0 0 24px ${cm.glow},0 0 48px ${cm.glow}`,animation:"orbPulse 3s ease-in-out infinite"}}),
+          React.createElement("div",{style:{fontSize:9,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.08em"}},"Current Mood"),
+          React.createElement("div",{style:{fontSize:12,fontWeight:700,color:cm.color,transition:"color 0.8s"}},cm.label)),
+        React.createElement("div",{style:{flex:1}},
+          React.createElement("div",{style:{fontFamily:"system-ui",fontSize:14,fontWeight:700,color:"#F0EEFF",marginBottom:3}},"How are you feeling right now?"),
+          React.createElement("div",{style:{fontSize:11,color:"#8B80B8",marginBottom:14}},"AI adapts your plan based on mood for better learning."),
+          React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+            MOODS.map(m=>React.createElement("div",{key:m.id,
+              style:{padding:"6px 13px",borderRadius:100,fontSize:11,fontWeight:600,cursor:"pointer",border:`1.5px solid ${mood===m.id?m.color:"#2E2750"}`,background:mood===m.id?`${m.color}20`:"#241E42",color:mood===m.id?m.color:"#8B80B8",display:"flex",alignItems:"center",gap:5,transition:"all 0.2s",userSelect:"none"},
+              onClick:()=>{setMood(m.id);showT(`Mood: ${m.label} — plan adapting`);}},
+              m.emoji," ",m.label))),
+          React.createElement("div",{style:{marginTop:14,padding:"10px 13px",background:"#241E42",borderLeft:`3px solid ${cm.color}`,borderRadius:"0 8px 8px 0",fontSize:11,color:"#8B80B8",lineHeight:1.6}},
+            React.createElement("span",{style:{color:cm.color}},"✦ "),INSIGHTS[mood]))),
+
+      // STATS
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}},
+        [{l:"Study Streak",v:"12",s:" days",d:"↑ Personal best"},{l:"Hours Today",v:"3.5",s:" hrs",d:"↑ 0.5 hrs vs avg"},{l:"Sessions Done",v:`${done}`,s:` / ${sessions.length}`,d:"On track"},{l:"Focus Score",v:"84",s:" %",d:"↑ 6% vs yesterday"}]
+          .map(({l,v,s,d})=>React.createElement("div",{key:l,style:{...c.card}},
+            React.createElement("div",{style:{fontSize:9,color:"#8B80B8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:7}},l),
+            React.createElement("div",{style:{fontFamily:"system-ui",fontSize:22,fontWeight:800,color:"#F0EEFF",letterSpacing:-0.5}},v,React.createElement("span",{style:{fontSize:12,fontWeight:400,color:"#8B80B8",letterSpacing:0}},s)),
+            React.createElement("div",{style:{fontSize:10,color:"#6EE7B7",marginTop:3}},d)))),
+
+      // PLANNER
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 300px",gap:18}},
+        // LEFT
+        React.createElement("div",null,
+          React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+            React.createElement("div",{style:{fontFamily:"system-ui",fontSize:14,fontWeight:700,color:"#F0EEFF"}},"Today's Sessions"),
+            React.createElement("div",{style:{fontSize:10,background:"#241E42",border:"1px solid #2E2750",color:"#8B80B8",padding:"2px 9px",borderRadius:100}},sessions.length," sessions")),
+
+          showAdd&&React.createElement("div",{style:{...c.card,marginBottom:12}},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+              React.createElement("div",{style:{fontFamily:"system-ui",fontSize:13,fontWeight:700,color:"#F0EEFF"}},"New Session"),
+              React.createElement("button",{style:{...c.btn(false),padding:"4px 9px"},onClick:()=>setShowAdd(false)},"✕")),
+            [{l:"Subject",k:"subject",ph:"e.g. Mathematics"},{l:"Topic",k:"topic",ph:"e.g. Calculus – Integration"}].map(f=>
+              React.createElement("div",{key:f.k,style:{marginBottom:10}},
+                React.createElement("label",{style:c.label},f.l),
+                React.createElement("input",{style:c.inputF,placeholder:f.ph,value:form[f.k],onChange:e=>setForm(p=>({...p,[f.k]:e.target.value}))}))),
+            React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}},
+              React.createElement("div",null,React.createElement("label",{style:c.label},"Time"),React.createElement("input",{type:"time",style:c.inputF,value:form.time,onChange:e=>setForm(p=>({...p,time:e.target.value}))})),
+              React.createElement("div",null,React.createElement("label",{style:c.label},"Duration"),
+                React.createElement("select",{style:c.inputF,value:form.dur,onChange:e=>setForm(p=>({...p,dur:e.target.value}))},
+                  ["25 min","45 min","60 min","90 min","120 min"].map(d=>React.createElement("option",{key:d},d))))),
+            React.createElement("div",{style:{marginBottom:12}},React.createElement("label",{style:c.label},"Difficulty"),
+              React.createElement("select",{style:c.inputF,value:form.diff,onChange:e=>setForm(p=>({...p,diff:e.target.value}))},
+                ["easy","medium","hard"].map(d=>React.createElement("option",{key:d,value:d},d.charAt(0).toUpperCase()+d.slice(1))))),
+            React.createElement("button",{style:{...c.btn(true),width:"100%"},onClick:addSession},"Add Session")),
+
+          sessions.map(session=>React.createElement("div",{key:session.id,
+            style:{...c.card,display:"flex",alignItems:"center",gap:12,marginBottom:9,position:"relative"}},
+            session.ai&&React.createElement("div",{style:{position:"absolute",top:8,right:10,fontSize:9,padding:"2px 8px",borderRadius:100,fontWeight:600,background:"rgba(245,158,11,0.12)",color:"#F59E0B",border:"1px solid rgba(245,158,11,0.3)"}},"AI Pick"),
+            React.createElement("div",{style:{flexShrink:0,width:44,textAlign:"center"}},
+              React.createElement("div",{style:{fontFamily:"system-ui",fontSize:12,fontWeight:700,color:"#C4B5FD"}},session.time),
+              React.createElement("div",{style:{fontSize:9,color:"#8B80B8",marginTop:2}},session.dur)),
+            React.createElement("div",{style:{width:1,height:32,background:"#2E2750",flexShrink:0}}),
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("div",{style:{fontWeight:600,fontSize:12,color:"#F0EEFF",marginBottom:2}},session.subject),
+              React.createElement("div",{style:{fontSize:10,color:"#8B80B8"}},session.topic),
+              React.createElement("div",{style:{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}},
+                React.createElement("span",{style:{fontSize:9,padding:"1px 7px",borderRadius:100,fontWeight:600,...DIFF_COLORS[session.diff]}},session.diff),
+                session.ai&&React.createElement("span",{style:{fontSize:9,padding:"1px 7px",borderRadius:100,fontWeight:600,background:"rgba(196,181,253,0.12)",color:"#C4B5FD"}},"AI Optimized"))),
+            React.createElement("div",{
+              style:{width:24,height:24,borderRadius:"50%",border:`1.5px solid ${session.done?cm.color:"#2E2750"}`,background:session.done?cm.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:session.done?"#0F0D1E":"transparent",fontSize:11,fontWeight:700,transition:"all 0.2s"},
+              onClick:()=>toggleDone(session.id)},session.done?"✓":"")))),
+
+        // RIGHT
+        React.createElement("div",null,
+          // AI Tips
+          React.createElement("div",{style:{...c.card,marginBottom:15}},
+            React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
+              React.createElement("div",{style:{width:24,height:24,borderRadius:6,background:"linear-gradient(135deg,#C4B5FD,#F59E0B)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}},"✦"),
+              React.createElement("div",{style:{fontFamily:"system-ui",fontSize:13,fontWeight:700,color:"#F0EEFF"}},"AI Recommendations")),
+            React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:7}},
+              AI_TIPS[mood].map((tip,i)=>React.createElement("div",{key:i,style:{display:"flex",gap:8,padding:"9px 11px",background:"#241E42",borderRadius:8,fontSize:11,color:"#8B80B8",lineHeight:1.5,alignItems:"flex-start"}},
+                React.createElement("span",{style:{fontSize:14,flexShrink:0,lineHeight:1.3}},tip.slice(0,2)),
+                React.createElement("span",null,tip.slice(3)))))),
+
+          // Progress
+          React.createElement("div",{style:c.card},
+            React.createElement("div",{style:{fontFamily:"system-ui",fontSize:13,fontWeight:700,color:"#F0EEFF",marginBottom:14}},"Subject Progress"),
+            SUBJECTS.map(sub=>React.createElement("div",{key:sub.name,style:{marginBottom:13}},
+              React.createElement("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:5}},
+                React.createElement("span",{style:{color:"#E8E2FF",fontWeight:500}},sub.name),
+                React.createElement("span",{style:{color:"#8B80B8"}},sub.pct,"%")),
+              React.createElement("div",{style:{height:4,background:"#241E42",borderRadius:100,overflow:"hidden"}},
+                React.createElement("div",{style:{height:"100%",borderRadius:100,background:`linear-gradient(90deg,${cm.color},#F59E0B)`,width:`${sub.pct}%`,transition:"width 0.8s ease"}})))))
+        )
+      ),
+
+      // AI MODAL
+      showAiModal&&React.createElement("div",{
+        style:{position:"fixed",inset:0,background:"rgba(10,8,20,0.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100},
+        onClick:e=>{if(e.target===e.currentTarget)setShowAiModal(false);}},
+        React.createElement("div",{style:{background:"#1A1535",border:"1px solid #2E2750",borderRadius:14,padding:24,maxWidth:500,width:"90%",maxHeight:"78vh",overflowY:"auto"}},
+          React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+            React.createElement("div",{style:{display:"flex",alignItems:"center",gap:9}},
+              React.createElement("div",{style:{width:26,height:26,borderRadius:7,background:"linear-gradient(135deg,#C4B5FD,#F59E0B)",display:"flex",alignItems:"center",justifyContent:"center"}},"✦"),
+              React.createElement("div",{style:{fontFamily:"system-ui",fontSize:15,fontWeight:700,color:"#F0EEFF"}},"AI Study Plan")),
+            React.createElement("button",{style:{...c.btn(false),padding:"4px 9px"},onClick:()=>setShowAiModal(false)},"✕")),
+          React.createElement("div",{style:{fontSize:11,color:"#8B80B8",marginBottom:12}},
+            "Mood: ",React.createElement("span",{style:{color:cm.color,fontWeight:600}},cm.emoji," ",cm.label)),
+          aiLoading
+            ?React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:9}},
+                [100,80,65,50].map((w,i)=>React.createElement("div",{key:i,style:{height:10,width:`${w}%`,background:"linear-gradient(90deg,#241E42,#2E2750,#241E42)",backgroundSize:"200% 100%",borderRadius:5}})),
+                React.createElement("div",{style:{textAlign:"center",color:"#8B80B8",fontSize:11,marginTop:6}},"AI is analysing your plan…"))
+            :React.createElement("div",{style:{fontSize:12,color:"#C4B5FD",lineHeight:1.7,whiteSpace:"pre-wrap"}},aiResponse))),
+
+      // TOAST
+      toast&&React.createElement("div",{style:{position:"fixed",bottom:20,right:20,background:"#1A1535",border:"1px solid #7C6FBB",borderRadius:10,padding:"11px 16px",fontSize:12,color:"#F0EEFF",zIndex:200,boxShadow:"0 6px 28px rgba(0,0,0,0.4)"}},
+        "✦ ",toast)
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
