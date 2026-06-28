@@ -350,6 +350,8 @@ let timerSec=25*60, timerRunning=false, timerMode="work", timerInterval=null, po
 const TMODES={work:{sec:25*60,label:"Focus Time"},short:{sec:5*60,label:"Short Break"},long:{sec:15*60,label:"Long Break"}};
 let toastTimer;
 
+function todayStr(){const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
+
 function save(){
   try{
     localStorage.setItem("lumino_sessions",JSON.stringify(sessions));
@@ -359,17 +361,29 @@ function save(){
     localStorage.setItem("lumino_nextSId",nextSId);
     localStorage.setItem("lumino_nextTId",nextTId);
     localStorage.setItem("lumino_pomCount",pomCount);
+    localStorage.setItem("lumino_date",todayStr());
   }catch(e){}
 }
 function load(){
   try{
-    sessions=JSON.parse(localStorage.getItem("lumino_sessions")||"[]");
+    // If it's a new day, reset sessions and pomodoro count but keep tasks & mood history
+    const savedDate=localStorage.getItem("lumino_date")||"";
+    if(savedDate !== todayStr()){
+      sessions=[];
+      nextSId=1;
+      pomCount=0;
+      localStorage.removeItem("lumino_sessions");
+      localStorage.removeItem("lumino_nextSId");
+      localStorage.removeItem("lumino_pomCount");
+    } else {
+      sessions=JSON.parse(localStorage.getItem("lumino_sessions")||"[]");
+      nextSId=parseInt(localStorage.getItem("lumino_nextSId")||"1");
+      pomCount=parseInt(localStorage.getItem("lumino_pomCount")||"0");
+    }
     tasks=JSON.parse(localStorage.getItem("lumino_tasks")||"[]");
     moodHistory=JSON.parse(localStorage.getItem("lumino_moodHist")||"[]");
     currentMood=localStorage.getItem("lumino_mood")||"focused";
-    nextSId=parseInt(localStorage.getItem("lumino_nextSId")||"1");
     nextTId=parseInt(localStorage.getItem("lumino_nextTId")||"1");
-    pomCount=parseInt(localStorage.getItem("lumino_pomCount")||"0");
   }catch(e){}
 }
 
