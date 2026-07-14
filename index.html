@@ -346,8 +346,8 @@ const AI_TIPS={
 
 let sessions=[], tasks=[], moodHistory=[];
 let nextSId=1, nextTId=1, currentMood="focused";
-let timerSec=25*60, timerRunning=false, timerMode="work", timerInterval=null, pomCount=0;
-const TMODES={work:{sec:25*60,label:"Focus Time"},short:{sec:5*60,label:"Short Break"},long:{sec:15*60,label:"Long Break"}};
+let timerSec=60*60, timerRunning=false, timerMode="work", timerInterval=null, pomCount=0;
+const TMODES={work:{sec:60*60,label:"Focus Time"},short:{sec:5*60,label:"Short Break"},long:{sec:15*60,label:"Long Break"}};
 let toastTimer;
 
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
